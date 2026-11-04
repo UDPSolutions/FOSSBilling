@@ -15,6 +15,11 @@
 /src/vendor/*
 build
 
+# Temp ignores to separate UDP-specific utilities from git tracking
+deploy.sh
+promo_manage.php
+src/seed_udp.php
+
 # Needed for some workflows
 DOCKER_ENV
 docker_tag
