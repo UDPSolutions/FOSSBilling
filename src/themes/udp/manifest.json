@@ -1,0 +1,19 @@
+{
+  "name": "UDP Social",
+  "version": "1.0.0",
+  "description": "UDP Social client area theme (forked from Huraga)",
+  "icon": "screenshot.jpg",
+  "author": "UDP Social",
+  "author_url": "https://udp.social/",
+  "markdown_attributes": {
+    "\\League\\CommonMark\\Extension\\Table\\Table": {
+      "class": "table table-hover"
+    },
+    "\\League\\CommonMark\\Extension\\CommonMark\\Node\\Inline\\Image": {
+      "class": "img-fluid"
+    },
+    "\\League\\CommonMark\\Extension\\CommonMark\\Node\\Block\\BlockQuote": {
+      "class": "blockquote"
+    }
+  }
+}

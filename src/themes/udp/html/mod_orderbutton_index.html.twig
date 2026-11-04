@@ -1,0 +1,189 @@
+{% extends "layout_public.html.twig" %}
+{% set loader_nr = request.loader | default("8") %}
+{% set loader_url = ('img/assets/loaders/loader'~loader_nr~'.gif') %}
+{% block meta_title %}{{ 'Order'|trans }}{% endblock %}
+
+{% block body %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card border-0" id="orderbutton" style="margin-bottom: 0">
+            <div class="card-body p-1">
+                <div id="orderManager" class="accordion">
+
+
+                    {{ include('mod_orderbutton_product_configuration.html.twig') }}
+
+                    {% if not client %}
+                        {{ include('mod_orderbutton_client.html.twig') }}
+                    {% endif %}
+
+                    {{ include('mod_orderbutton_checkout.html.twig') }}
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#payment-html" aria-expanded="false" aria-controls="payment-html">
+                                <svg class="svg-icon me-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                                    <path
+                                        d="M20,8H4V6H20M20,18H4V12H20M20,4H4C2.89,4 2,4.89 2,6V18A2,2 0 0,0 4,20H20A2,2 0 0,0 22,18V6C22,4.89 21.1,4 20,4Z"/>
+                                </svg>
+                                {{ 'Payment'|trans }}
+                            </button>
+                        </h2>
+                        <div id="payment-html" class="accordion-collapse collapse" data-bs-parent="#orderManager">
+                            <div class="accordion-body">
+                                <div class="accordion-inner" id="payment-html-inner"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                {% if guest.extension_is_on({"mod":'branding'}) %}
+                    <div class="d-flex justify-content-center small text-muted pt-3 pb-2">
+                        <span>{{ 'Powered by'|trans }}</span>&nbsp;<a href="https://fossbilling.org"
+                                                                      title="Billing Software" target="_blank">FOSSBilling
+                            Community</a>
+                    </div>
+                {% endif %}
+
+            </div>
+        </div>
+    </div>
+</div>
+<div class="loading"
+     style="display: none; background: rgba(0,0,0,.5) no-repeat; width:100%; height:100%; position:fixed; top:0; left:0; z-index:999;">
+    <img src="{{ loader_url | mod_asset_url('orderbutton') }}"
+         style="display: block; margin-left: auto; margin-right: auto;position: relative; top : 50%">
+</div>
+{% endblock %}
+{% block js %}
+<script>
+    // Clear all cart items, then run callback.
+    function _clearCartThen(callback) {
+        var buttons = document.querySelectorAll('.remove-cart-item');
+        if (!buttons.length) { callback(); return; }
+        var promises = Array.from(buttons).map(function(btn) {
+            return new Promise(function(resolve) {
+                API.guest.post('cart/remove_item',
+                    { id: btn.getAttribute('data-cart-item-id'), CSRFToken: '{{ CSRFToken }}' },
+                    resolve, resolve);
+            });
+        });
+        Promise.all(promises).then(callback);
+    }
+
+    function onAddToCart(result) {
+        var _promo = new URLSearchParams(window.location.search).get('promocode');
+        var _dest  = '{{ "order"|link }}?checkout=1';
+        if (_promo) _dest += '&promocode=' + encodeURIComponent(_promo);
+        window.location.href = _dest;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // "Have a coupon code?" link
+        var showPromoField = document.getElementById('show-promo-field');
+        if (showPromoField) {
+            showPromoField.addEventListener('click', function(e) {
+                e.preventDefault();
+                document.getElementById('apply-promo').style.display = '';
+                showPromoField.style.display = 'none';
+                document.getElementById('promocode').focus();
+            });
+        }
+
+        // Auto-show the promo form and focus it when a code arrives pre-filled from the URL.
+        var _promoInput = document.getElementById('promocode');
+        var _promoForm  = document.getElementById('apply-promo');
+        var _promoLink  = document.getElementById('show-promo-field');
+        if (_promoInput && _promoForm && _promoInput.value.trim()) {
+            _promoForm.style.display = '';
+            if (_promoLink) _promoLink.style.display = 'none';
+            _promoInput.focus();
+        }
+
+        // Guard: opening Product Configuration accordion when cart has items.
+        var orderEl = document.getElementById('order');
+        if (orderEl) {
+            orderEl.addEventListener('show.bs.collapse', function(e) {
+                if (!document.querySelectorAll('.remove-cart-item').length) return;
+                e.preventDefault();
+                if (!confirm('{{ 'Your current selection will be replaced. Continue?'|trans }}')) return;
+                _clearCartThen(function() { window.location.href = window.location.pathname; });
+            });
+        }
+
+        // Guard: clicking Next in Product Configuration when cart already has an item.
+        var replacingCart = false;
+        var addToCartForm = document.querySelector('form[data-api-jsonp="onAddToCart"]');
+        if (addToCartForm) {
+            addToCartForm.addEventListener('submit', function(e) {
+                if (replacingCart) { replacingCart = false; return; } // second pass — let _apiForm handle it
+                if (!document.querySelectorAll('.remove-cart-item').length) return; // cart empty
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                if (!confirm('{{ 'Your current selection will be replaced. Continue?'|trans }}')) return;
+                var form = this;
+                _clearCartThen(function() {
+                    replacingCart = true;
+                    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                });
+            }, true); // capture phase — fires before _apiForm's bubble listener
+        }
+    });
+
+    function onOrderCheckout(result){
+        if (result.invoice_hash && result.gateway_id) {
+            window.location.href = '{{ "invoice/banklink"|link }}' + '/' + result.invoice_hash + '/' + result.gateway_id;
+            return;
+        }
+        // No gateway configured (dev / free order): show in-page confirmation.
+        var container = document.getElementById('payment-html-inner');
+        container.innerHTML = `
+            <div class="text-center py-3">
+                <p class="fw-semibold mb-1">Order received!</p>
+                <p class="text-muted small mb-0">We'll follow up by email with next steps.</p>
+            </div>
+        `;
+        bootstrap.Collapse.getOrCreateInstance(document.getElementById('checkout')).hide();
+        bootstrap.Collapse.getOrCreateInstance(document.getElementById('payment-html')).show();
+    }
+
+    function _onLoginSuccess(email) {
+        FOSSBilling.message("{{ 'You logged in successfully'|trans }}");
+        var registerEl = document.getElementById('register');
+        if (registerEl) {
+            var headerSpan = registerEl.previousElementSibling
+                ? registerEl.previousElementSibling.querySelector('.accordion-button span')
+                : null;
+            if (headerSpan) headerSpan.textContent = 'Logged in as ' + email;
+            new bootstrap.Collapse(registerEl).hide();
+        }
+        var checkoutBtn = document.getElementById('checkoutButton');
+        if (checkoutBtn) checkoutBtn.hidden = false;
+        var loginMsg = document.getElementById('loginMessage');
+        if (loginMsg) loginMsg.hidden = true;
+        setTimeout(function() {
+            if (registerEl && registerEl.parentElement) registerEl.parentElement.remove();
+            var checkoutEl = document.getElementById('checkout');
+            if (checkoutEl) new bootstrap.Collapse(checkoutEl).show();
+        }, 500);
+    }
+
+    function onLogin(result) {
+        var emailEl = document.getElementById('email');
+        _onLoginSuccess(emailEl ? emailEl.value : '');
+    }
+
+    function onAccountCreate(result) {
+        var email = document.getElementById('reg-email').value;
+        var password = document.getElementById('reg-password').value;
+        API.guest.post('client/login', {
+            email: email,
+            password: password,
+            CSRFToken: '{{ CSRFToken }}'
+        }, function() {
+            _onLoginSuccess(email);
+        });
+    }
+</script>
+{% endblock %}

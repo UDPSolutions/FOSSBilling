@@ -1,0 +1,44 @@
+{% extends "layout_public.html.twig" %}
+
+{% block meta_title %}Sign In — UDP Social{% endblock %}
+{% block body_class %}page-login{% endblock %}
+
+{% block body %}
+{% if client is defined %}
+<script>window.location.replace("{{ '/order/service'|link }}");</script>
+{% else %}
+<div class="container h-100">
+  <div class="row h-75 justify-content-center align-items-center">
+    <div class="col-md-6 col-lg-4">
+      <div class="card">
+        <div class="card-body">
+          <h1 class="text-center m-4">{{ 'Sign in to your account'|trans }}</h1>
+
+          <form class="api-form auth" action="{{ 'api/guest/client/login'|link }}" method="post" data-api-redirect="{{ redirect_uri|default('/')|link }}">
+            <div class="mb-3">
+              <label class="form-label" for="email">{{ 'Email'|trans }}</label>
+              <input class="form-control" id="email" type="email" name="email" value="{{ request.email }}" placeholder="{{ 'Your UDP Social email'|trans }}" required autofocus>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="password">{{ 'Password'|trans }}</label>
+              <input class="form-control" id="password" type="password" name="password" placeholder="{{ 'Your UDP Social password'|trans }}" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100 mb-3">{{ 'Sign In'|trans }}</button>
+          </form>
+
+          <p class="text-center text-muted small mb-2">
+            Use your <a href="https://blog.udp.social" target="_blank">blog.udp.social</a> credentials.
+          </p>
+
+          <div class="text-center">
+            <a href="https://blog.udp.social/wp-login.php?action=lostpassword" class="btn btn-outline-secondary btn-sm">
+              {{ 'Forgot your password?'|trans }}
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html class="no-js" lang="{{ settings.locale|default('en') }}" data-bs-theme="{{ settings.theme|default('light') }}">
+<head>
+    <meta charset="utf-8">
+    <title>{{ settings.meta_title_prefix }} {% block meta_title %}{% endblock %} {{ settings.meta_title_suffix }}</title>
+
+    <meta property="bb:url" content="{{ constant('SYSTEM_URL') }}">
+    <meta property="bb:client_area" content="{{ '/'|link }}">
+    <meta name="csrf-token" content="{{ CSRFToken }}">
+
+    <meta name="description" content="{% block meta_description %}{{ settings.meta_description }}{% endblock %}">
+    <meta name="keywords" content="{{ settings.meta_keywords }}">
+    <meta name="robots" content="{{ settings.meta_robots }}">
+    <meta name="author" content="{{ settings.meta_author }}">
+    <meta name="generator" content="FOSSBilling">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {% block opengraph %}{% endblock %}
+
+    <link rel="stylesheet" href="{{ 'build/css/vendor.css' | asset_url }}">
+    <link rel="stylesheet" href="{{ 'build/css/huraga.css' | asset_url }}">
+
+    <link rel="shortcut icon" href="{{ guest.system_company.favicon_url }}">
+
+    {{ "Api/API.js" | library_url | script_tag }}
+    <script src="{{ 'build/js/huraga.js' | asset_url }}"></script>
+    {% block head %}{% endblock %}
+    {% block js %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <div class="position-fixed top-0 end-0 p-2 small" style="z-index: 1050;">
+        {% if client %}
+            {% set profile = client.profile_get %}
+            <span class="text-muted">{{ profile.email }}</span>
+            <a href="{{ 'client/logout'|link }}" class="ms-1 text-muted">(Logout)</a>
+        {% else %}
+            <a href="{{ 'login'|link }}" class="text-muted">Login</a>
+        {% endif %}
+    </div>
+    {% block body %}{% endblock %}
+    <div class="toast-container position-fixed bottom-0 end-0 p-3 toast-container-zindex" aria-live="polite" aria-atomic="true"></div>
+    {{ include('partial_pending_messages.html.twig', ignore_missing: true) }}
+</body>
+</html>

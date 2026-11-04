@@ -1,0 +1,123 @@
+{% extends request.ajax ? "layout_blank.html.twig" : "layout_default.html.twig" %}
+
+{% block meta_title %}My Account{% endblock %}
+{% block page_header %}My Account{% endblock %}
+
+{% block body_class %}client-manage{% endblock %}
+
+{% import "macro_functions.html.twig" as mf %}
+
+{% block content %}
+{% set profile = client.profile_get() %}
+
+<div class="row mb-4">
+  <div class="col-md-6">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="h6 m-0 pt-1">Profile</span>
+        <a class="btn btn-sm btn-dark" href="{{ 'client/profile'|link }}">Update</a>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4 text-muted small fw-normal">Name</dt>
+          <dd class="col-sm-8">{{ profile.first_name }} {{ profile.last_name }}</dd>
+          <dt class="col-sm-4 text-muted small fw-normal">Email</dt>
+          <dd class="col-sm-8">{{ profile.email }}</dd>
+          <dt class="col-sm-4 text-muted small fw-normal">Balance</dt>
+          <dd class="col-sm-8">{{ profile.balance | money(profile.currency) }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="h6 m-0 pt-1">Invoices</span>
+        <a class="btn btn-sm btn-dark" href="{{ 'invoice'|link }}">All Invoices</a>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4 text-muted small fw-normal">Total</dt>
+          <dd class="col-sm-8">{{ client.invoice_get_list().total }}</dd>
+          <dt class="col-sm-4 text-muted small fw-normal">Paid</dt>
+          <dd class="col-sm-8">{{ client.invoice_get_list({ "status": "paid" }).total }}</dd>
+          <dt class="col-sm-4 text-muted small fw-normal">Unpaid</dt>
+          <dd class="col-sm-8">{{ client.invoice_get_list({ "status": "unpaid" }).total }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-md-6">
+    <div class="card mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="h6 m-0 pt-1">Subscriptions</span>
+        <div class="py-2">
+          <a class="btn btn-sm btn-primary order-button" href="{{ 'order'|link }}">New order</a>
+          <a class="btn btn-sm btn-dark" href="{{ 'order/service'|link }}">All orders</a>
+        </div>
+      </div>
+      <div class="card-body p-1">
+        {% set orders = client.order_get_list({ "per_page": 10, "page": request.page, "hide_addons": 1 }) %}
+        {% if orders.list %}
+          <div class="list-group list-group-flush">
+            {% for i, order in orders.list %}
+              <a href="{{ 'order/service/manage'|link }}/{{ order.id }}"
+                 class="list-group-item d-flex justify-content-between align-items-center" aria-current="true">
+                <div>
+                  <div><span><strong>#{{ order.id }}</strong></span>&nbsp;<span>{{ order.title|truncate(45) }}</span></div>
+                  <span class="text-secondary small" title="{{ order.updated_at|format_date }}">{{ order.updated_at|timeago }} ago</span>
+                </div>
+                <span class="badge {% if order.status == 'active' %}bg-success{% elseif order.status == 'pending_setup' %}bg-warning{% elseif order.status == 'failed_setup' or order.status == 'suspended' or order.status == 'failed_renew' %}bg-danger{% elseif order.status == 'canceled' %}bg-secondary{% endif %}">
+                  {{ mf.status_name(order.status) }}
+                </span>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="d-flex justify-content-center my-2 p-2">
+            <span class="m-0">No active subscriptions — <a href="{{ 'order'|link }}">get started</a></span>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card mb-4">
+      <div class="card-header py-3">
+        <span class="h6 m-0 pt-1">Recent Invoices</span>
+      </div>
+      <div class="card-body p-1">
+        {% set invoices = client.invoice_get_list({ "per_page": 5 }) %}
+        {% if invoices.list %}
+          <div class="list-group list-group-flush">
+            {% for i, invoice in invoices.list %}
+              <a href="{{ 'invoice'|link }}/{{ invoice.id }}"
+                 class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                  <div><strong>#{{ invoice.id }}</strong> {{ invoice.serie }}{{ invoice.nr }}</div>
+                  <span class="text-secondary small">{{ invoice.created_at|format_date }}</span>
+                </div>
+                <div class="text-end">
+                  <div>{{ invoice.total | money(invoice.currency) }}</div>
+                  <span class="badge {% if invoice.status == 'paid' %}bg-success{% elseif invoice.status == 'unpaid' %}bg-warning{% else %}bg-secondary{% endif %}">
+                    {{ invoice.status }}
+                  </span>
+                </div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="d-flex justify-content-center my-2 p-2">
+            <span class="m-0">No invoices yet</span>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
