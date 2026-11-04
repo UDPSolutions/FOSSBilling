@@ -1,8 +1,8 @@
 <?php
 
-declare(strict_types=1);
 /**
  * Copyright 2022-2025 FOSSBilling
+ * Copyright 2011-2021 BoxBilling, Inc.
  * SPDX-License-Identifier: Apache-2.0.
  *
  * @copyright FOSSBilling (https://www.fossbilling.org)
@@ -10,9 +10,6 @@ declare(strict_types=1);
  */
 
 namespace Box\Mod\Redirect\Controller;
-
-use FOSSBilling\Http\ResponseFactory;
-use Symfony\Component\HttpFoundation\Response;
 
 class Client implements \FOSSBilling\InjectionAwareInterface
 {
@@ -28,7 +25,7 @@ class Client implements \FOSSBilling\InjectionAwareInterface
         return $this->di;
     }
 
-    public function register(\Box_App &$app): void
+    public function register(\Box_App &$app)
     {
         $app->get('/me', 'get_profile', [], '\\' . \Box\Mod\Client\Controller\Client::class);
         $app->get('/balance', 'get_balance', [], '\\' . \Box\Mod\Client\Controller\Client::class);
@@ -40,7 +37,15 @@ class Client implements \FOSSBilling\InjectionAwareInterface
         $app->get('/service', 'get_orders', [], '\\' . \Box\Mod\Order\Controller\Client::class);
         $app->get('/service/manage/:id', 'get_order', ['id' => '[0-9]+'], '\\' . \Box\Mod\Order\Controller\Client::class);
         $app->get('/contact-us', 'get_contact_us', [], '\\' . \Box\Mod\Support\Controller\Client::class);
-        $app->get('/contact-us/conversation/:hash', 'get_ticket_redirect', ['hash' => '[a-z0-9]+'], '\\' . \Box\Mod\Support\Controller\Client::class);
+        $app->get('/contact-us/conversation/:hash', 'get_contact_us_conversation', ['hash' => '[a-z0-9]+'], '\\' . \Box\Mod\Support\Controller\Client::class);
+
+        // UDP clean URL aliases
+        $app->get('/logout', 'get_client_logout', [], '\\' . \Box\Mod\Client\Controller\Client::class);
+        $app->get('/user/manage', 'get_client_index', [], '\\' . \Box\Mod\Client\Controller\Client::class);
+        $app->get('/user/manage/:page', 'get_client_page', ['page' => '[a-z0-9-]+'], '\\' . \Box\Mod\Client\Controller\Client::class);
+
+        // WP → FOSSBilling SSO handoff: billing.udp.social/checkout?wp_token=...
+        $app->get('/checkout', 'get_checkout', [], '\\' . \Box\Mod\Client\Controller\Client::class);
 
         $service = $this->di['mod_service']('redirect');
         $redirects = $service->getRedirects();
@@ -49,29 +54,12 @@ class Client implements \FOSSBilling\InjectionAwareInterface
         }
     }
 
-    public function do_redirect(\Box_App $app): Response
+    public function do_redirect(\Box_App $app): never
     {
         $service = $this->di['mod_service']('redirect');
         $target = $service->getRedirectByPath($app->uri);
-
-        if ($target === null || !$this->isTargetAllowed($target)) {
-            return (new ResponseFactory())->html('', 404);
-        }
-
-        return $app->redirectUrl($target, 301);
-    }
-
-    private function isTargetAllowed(string $target): bool
-    {
-        if (trim($target) === '' || strpbrk($target, "\r\n") !== false) {
-            return false;
-        }
-
-        $scheme = parse_url($target, PHP_URL_SCHEME);
-        if (is_string($scheme) && !in_array(strtolower($scheme), ['http', 'https'], true)) {
-            return false;
-        }
-
-        return true;
+        header('HTTP/1.1 301 Moved Permanently');
+        header('Location: ' . $target);
+        exit;
     }
 }

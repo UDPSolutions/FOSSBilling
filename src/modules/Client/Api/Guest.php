@@ -74,6 +74,12 @@ class Guest extends \FOSSBilling\Api\AbstractApi
     #[RequiredParams(['email' => 'Email required', 'first_name' => 'First name required', 'password' => 'Password required', 'password_confirm' => 'Password confirmation required'])]
     public function create($data = []): bool
     {
+        // When the WP bridge is active, all client accounts are provisioned via
+        // the SSO handoff (/checkout?wp_token=...). Direct registration is blocked.
+        if (\FOSSBilling\Config::getProperty('udp.wordpress_url', '')) {
+            throw new \FOSSBilling\InformationException('Please register at blog.udp.social and use the "Get Your Instance" link.');
+        }
+
         $startedAt = microtime(true);
 
         try {

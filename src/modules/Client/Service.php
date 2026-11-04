@@ -1038,6 +1038,35 @@ class Service implements InjectionAwareInterface
 
     public function authorizeClient($email, $plainTextPassword): ?Client
     {
+        $wpUrl = \FOSSBilling\Config::getProperty('udp.wordpress_url', '');
+
+        if ($wpUrl) {
+            $wpUser = $this->validateWithWordPress(rtrim($wpUrl, '/'), $email, $plainTextPassword);
+
+            if (is_array($wpUser)) {
+                // WP validated — find or create the FOSSBilling client record.
+                $model = $this->clientRepository->findOneBy(['email' => $email, 'status' => Client::ACTIVE]);
+                if (!$model instanceof Client) {
+                    $model = $this->createClient([
+                        'email'      => $email,
+                        'first_name' => $wpUser['first_name'] ?: ($wpUser['display_name'] ?? strstr($email, '@', true)),
+                        'last_name'  => $wpUser['last_name'] ?? '',
+                        'password'   => bin2hex(random_bytes(16)),
+                        'status'     => Client::ACTIVE,
+                        'ip'         => $this->di['request']->getClientIp(),
+                    ]);
+                }
+
+                return $model;
+            }
+
+            if ($wpUser === false) {
+                // WP reachable but credentials rejected — don't fall through.
+                return null;
+            }
+            // $wpUser === null: WP unreachable — fall through to local auth below.
+        }
+
         // The shared authorization service still reads the legacy bean fields directly.
         // Keep that boundary until the identity/authentication slice migrates as well.
         $legacyClient = $this->di['db']->findOne('Client', 'email = ? AND status = ?', [$email, Client::ACTIVE]);
@@ -1060,6 +1089,97 @@ class Service implements InjectionAwareInterface
         $client = $this->clientRepository->find((int) $authorizedId);
 
         return $client instanceof Client ? $client : null;
+    }
+
+    /**
+     * Validate credentials against the WordPress REST endpoint.
+     *
+     * Returns array of WP user data on success, false on bad credentials,
+     * null if the endpoint is unreachable (caller should fall back to local auth).
+     */
+    private function validateWithWordPress(string $wpUrl, string $email, string $password): array|false|null
+    {
+        $ch = curl_init($wpUrl . '/wp-json/udp/v1/validate');
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode(['email' => $email, 'password' => $password]),
+            CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_CONNECTTIMEOUT => 3,
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlErr) {
+            error_log('[UDP] WP validate unreachable: ' . $curlErr);
+
+            return null;
+        }
+
+        if ($httpCode === 200) {
+            return json_decode($response, true) ?: [];
+        }
+
+        if ($httpCode === 401) {
+            return false;
+        }
+
+        // Unexpected status (5xx, etc.) — treat as unreachable.
+        error_log('[UDP] WP validate unexpected HTTP ' . $httpCode);
+
+        return null;
+    }
+
+    /**
+     * Validate a signed WP handoff token and return (or auto-create) the matching FOSSBilling client.
+     *
+     * Token format: base64url(JSON payload) . '.' . HMAC-SHA256(payload, secret)
+     * Payload must contain: uid, email, exp, nonce; optionally first_name, last_name.
+     *
+     * @throws \FOSSBilling\InformationException on invalid/expired token or missing config
+     */
+    public function loginClientFromWpToken(string $token): Client
+    {
+        $secret = \FOSSBilling\Config::getProperty('udp.billing_secret', '');
+        if (!$secret) {
+            throw new \FOSSBilling\InformationException('WP bridge not configured.');
+        }
+
+        $parts = explode('.', $token, 2);
+        if (count($parts) !== 2) {
+            throw new \FOSSBilling\InformationException('Invalid token.');
+        }
+        [$payloadB64, $sig] = $parts;
+
+        $expected = hash_hmac('sha256', $payloadB64, $secret);
+        if (!hash_equals($expected, $sig)) {
+            throw new \FOSSBilling\InformationException('Invalid token.');
+        }
+
+        $payload = json_decode(base64_decode(strtr($payloadB64, '-_', '+/')), true);
+        if (!is_array($payload) || empty($payload['email']) || ($payload['exp'] ?? 0) < time()) {
+            throw new \FOSSBilling\InformationException('This link has expired. Please try again.');
+        }
+
+        $email = strtolower(trim($payload['email']));
+        $model = $this->clientRepository->findOneBy(['email' => $email, 'status' => Client::ACTIVE]);
+
+        if (!$model instanceof Client) {
+            $model = $this->createClient([
+                'email'      => $email,
+                'first_name' => $payload['first_name'] ?? strstr($email, '@', true),
+                'last_name'  => $payload['last_name'] ?? '',
+                'password'   => bin2hex(random_bytes(16)),
+                'status'     => Client::ACTIVE,
+                'ip'         => $this->di['request']->getClientIp(),
+            ]);
+            $this->di['logger']->info('Auto-created FOSSBilling client #%s from WP token', $model->getId());
+        }
+
+        return $model;
     }
 
     public function sendEmailConfirmationForClient(Client|\Model_Client $client): void
