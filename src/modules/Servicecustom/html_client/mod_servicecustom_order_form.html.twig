@@ -1,0 +1,137 @@
+{{ product_details }}
+
+<input type="hidden" name="domain_type" value="subdomain">
+
+<h4 class="mt-4 mb-1"><strong>{{ 'Your Instance'|trans }}</strong></h4>
+
+{# Subdomain picker #}
+<div id="udp-subdomain-section" class="mb-3">
+    <label class="form-label">{{ 'Choose your subdomain'|trans }}</label>
+    <div class="d-flex align-items-center gap-2" style="max-width: 540px;">
+        <div class="input-group">
+            <input type="text" class="form-control" id="udp-subdomain-input" name="subdomain"
+                   placeholder="yourfamily" autocomplete="off" spellcheck="false"
+                   pattern="[a-z0-9][a-z0-9\-]{0,61}[a-z0-9]">
+            <select class="form-select flex-grow-0" style="max-width: 160px;" name="domain" id="udp-domain-select">
+                <option value="udp.social">.udp.social</option>
+            </select>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm text-nowrap" id="udp-check-btn">
+            {{ 'Check'|trans }}
+        </button>
+    </div>
+    <div id="udp-subdomain-feedback" class="form-text mt-1" aria-live="polite"></div>
+</div>
+
+{# Username #}
+<div class="mb-3">
+    <label class="form-label" for="udp-customer-username">{{ 'Choose a username'|trans }}</label>
+    <input type="text" class="form-control" id="udp-customer-username"
+           name="customer_username" placeholder="jsmith"
+           pattern="[a-z0-9][a-z0-9_\-]{0,30}"
+           style="max-width: 260px;" autocomplete="off" spellcheck="false" required>
+    <div class="form-text">{{ 'Used to log in to your Friendica instance.'|trans }}</div>
+</div>
+
+{# Network name — derived from subdomain, editable #}
+<div class="mb-3">
+    <label class="form-label" for="udp-network-name">{{ 'Community name'|trans }}</label>
+    <input type="text" class="form-control" id="udp-network-name"
+           name="network_name" placeholder="Smith Family"
+           style="max-width: 320px;" autocomplete="off" spellcheck="false" required>
+    <div class="form-text">{{ 'The display name for your Friendica community.'|trans }}</div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const subdomainInput  = document.getElementById('udp-subdomain-input');
+    const domainSelect    = document.getElementById('udp-domain-select');
+    const checkBtn        = document.getElementById('udp-check-btn');
+    const feedback        = document.getElementById('udp-subdomain-feedback');
+    const networkNameInput = document.getElementById('udp-network-name');
+    const nextBtn         = document.getElementById('config-next');
+
+    function humanizeSubdomain(s) {
+        return s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    let subdomainConfirmed = false;
+
+    function setNextEnabled(enabled) {
+        if (nextBtn) {
+            nextBtn.disabled = !enabled;
+            nextBtn.style.display = '';
+        }
+    }
+
+    function resetSubdomainState() {
+        subdomainConfirmed = false;
+        feedback.textContent = '';
+        feedback.className = 'form-text mt-1';
+        setNextEnabled(false);
+        // Auto-populate network name from subdomain if the user hasn't touched it yet.
+        const label = subdomainInput.value.trim().toLowerCase();
+        if (label && !networkNameInput.dataset.userEdited) {
+            networkNameInput.value = humanizeSubdomain(label);
+        }
+    }
+
+    function checkAvailability() {
+        const label  = subdomainInput.value.trim().toLowerCase();
+        const domain = domainSelect.value;
+        if (!label) {
+            feedback.textContent = '{{ 'Please enter a subdomain label.'|trans }}';
+            feedback.className = 'form-text mt-1 text-warning';
+            return;
+        }
+
+        checkBtn.disabled = true;
+        feedback.textContent = '{{ 'Checking…'|trans }}';
+        feedback.className = 'form-text mt-1 text-secondary';
+
+        API.guest.post(
+            'servicecustom/check_subdomain',
+            { subdomain: label, domain: domain },
+            function (result) {
+                checkBtn.disabled = false;
+                if (result.available) {
+                    subdomainConfirmed = true;
+                    feedback.textContent = label + '.' + domain + ' {{ 'is available!'|trans }}';
+                    feedback.className = 'form-text mt-1 text-success';
+                    setNextEnabled(true);
+                } else {
+                    subdomainConfirmed = false;
+                    const msg = result.reason === 'invalid'
+                        ? '{{ 'Invalid subdomain. Use only letters, numbers, and hyphens.'|trans }}'
+                        : '{{ 'That subdomain is taken. Please try another.'|trans }}';
+                    feedback.textContent = msg;
+                    feedback.className = 'form-text mt-1 text-danger';
+                    setNextEnabled(false);
+                }
+            },
+            function () {
+                checkBtn.disabled = false;
+                feedback.textContent = '{{ 'Could not check availability. Please try again.'|trans }}';
+                feedback.className = 'form-text mt-1 text-danger';
+            }
+        );
+    }
+
+    networkNameInput.addEventListener('input', () => {
+        networkNameInput.dataset.userEdited = '1';
+    });
+
+    checkBtn.addEventListener('click', checkAvailability);
+    subdomainInput.addEventListener('input', resetSubdomainState);
+    domainSelect.addEventListener('change', resetSubdomainState);
+    subdomainInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            checkAvailability();
+        }
+    });
+
+    // Next disabled until subdomain check passes
+    nextBtn.disabled = true;
+});
+</script>

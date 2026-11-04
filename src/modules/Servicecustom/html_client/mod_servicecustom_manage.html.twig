@@ -1,0 +1,114 @@
+{% if service.slot_id is defined and service.slot_id %}
+<div class="card mb-4">
+    <div class="card-header py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="mb-1">{{ 'Your Network'|trans }}</h1>
+                <span class="small text-secondary">{{ service.subdomain }}.udp.social</span>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+
+        {{# Spinner + rolling status label — hidden once terminal state is reached #}}
+        <div id="udp-prov-spinner" class="d-flex align-items-center gap-2 mb-2">
+            <div class="spinner-border spinner-border-sm text-secondary" role="status" aria-hidden="true"></div>
+            <span id="udp-prov-label" class="text-secondary">{{ 'Checking status…'|trans }}</span>
+        </div>
+
+        {{# Shown on ACTIVE #}}
+        <div id="udp-prov-ready" class="d-none">
+            <p class="mb-3">
+                {{ 'Your network is ready.'|trans }}
+                {{ 'Check your email for login credentials.'|trans }}
+            </p>
+            <a id="udp-launch-btn" href="#" target="_blank" rel="noopener noreferrer"
+               class="btn btn-primary">
+                {{ 'Open your network'|trans }}
+            </a>
+        </div>
+
+        {{# Shown on FAILED #}}
+        <div id="udp-prov-failed" class="d-none">
+            <p class="text-danger mb-1">{{ 'Something went wrong setting up your network.'|trans }}</p>
+            <p class="small text-secondary mb-0">
+                {{ 'Please contact'|trans }}
+                <a href="mailto:support@udp.social?subject=Setup+failed+for+order+%23{{ order.id|url_encode }}">support@udp.social</a>
+                {{ 'with order number'|trans }} #{{ order.id }}.
+            </p>
+        </div>
+
+    </div>
+</div>
+
+<script>
+(function () {
+    var ORDER_ID  = {{ order.id }};
+    var MAX_POLLS = 60;   // 15 min ceiling
+    var INTERVAL  = 15000;
+    var polls = 0;
+    var timer = null;
+
+    var statusLabels = {
+        QUEUED:       'Waiting to start…',
+        PENDING:      'Starting up…',
+        DNS_CREATING: 'Setting up your domain…',
+        DEPLOYING:    'Installing your network…',
+        ACTIVE:       'Ready',
+        FAILED:       'Setup failed',
+    };
+
+    var elSpinner   = document.getElementById('udp-prov-spinner');
+    var elLabel     = document.getElementById('udp-prov-label');
+    var elReady     = document.getElementById('udp-prov-ready');
+    var elFailed    = document.getElementById('udp-prov-failed');
+    var elLaunchBtn = document.getElementById('udp-launch-btn');
+
+    function onActive(instanceUrl) {
+        elSpinner.classList.add('d-none');
+        if (instanceUrl) {
+            elLaunchBtn.href = instanceUrl;
+        }
+        elReady.classList.remove('d-none');
+    }
+
+    function onFailed() {
+        elSpinner.classList.add('d-none');
+        elFailed.classList.remove('d-none');
+    }
+
+    function poll() {
+        polls++;
+        API.client.post(
+            'servicecustom/get_slot_status',
+            { order_id: ORDER_ID },
+            function (result) {
+                var status = (result && result.status) ? result.status : 'PENDING';
+                elLabel.textContent = statusLabels[status] || 'Checking status…';
+
+                if (status === 'ACTIVE') {
+                    onActive(result.instance_url || null);
+                    return;
+                }
+                if (status === 'FAILED') {
+                    onFailed();
+                    return;
+                }
+                if (polls < MAX_POLLS) {
+                    timer = setTimeout(poll, INTERVAL);
+                }
+            },
+            function () {
+                // Network / server error — keep trying silently
+                if (polls < MAX_POLLS) {
+                    timer = setTimeout(poll, INTERVAL);
+                }
+            }
+        );
+    }
+
+    // First check after a short delay so the page fully paints first
+    timer = setTimeout(poll, 2000);
+})();
+</script>
+{% endif %}
