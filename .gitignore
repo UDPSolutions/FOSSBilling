@@ -16,7 +16,6 @@
 build
 
 # Temp ignores to separate UDP-specific utilities from git tracking
-deploy.sh
 promo_manage.php
 src/seed_udp.php
 
@@ -36,3 +35,6 @@ output.log
 
 ### Cypress ###
 tests/E2E/Cypress/artifacts
+
+# deploy.sh host settings (template: deploy.env.example)
+/deploy.env
